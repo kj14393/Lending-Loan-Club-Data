@@ -1,0 +1,120 @@
+rm(list=ls())
+loan.data<-read.csv("loan.csv")
+str(loan.data)
+summary(loan.data)
+colnames(loan.data)
+
+#Removed columns with NA's in more than 8lakhs rows
+NA_cols<-c('earliest_cr_line','mths_since_last_delinq','mths_since_last_record','mths_since_last_major_derog','annual_inc_joint','dti_joint','open_acc_6m','open_il_6m','open_il_12m','open_il_24m','mths_since_rcnt_il','total_bal_il','il_util','open_rv_12m','open_rv_24m','max_bal_bc','all_util','inq_fi','total_cu_tl','inq_last_12m')
+new_loan.data<-loan.data[ ,! colnames(loan.data) %in% c(NA_cols) ]
+str(new_loan.data)
+summary(new_loan.data)
+
+new_loan.data$id<-factor(new_loan.data$id)
+new_loan.data$member_id<-factor(new_loan.data$member_id)
+new_loan.data$policy_code<-factor(new_loan.data$policy_code)
+
+#impute missing values
+new_loan.data$annual_inc<-ifelse(is.na(new_loan.data$annual_inc),mean(new_loan.data$annual_inc,na.rm = TRUE),new_loan.data$annual_inc)
+new_loan.data$delinq_2yrs<-ifelse(is.na(new_loan.data$delinq_2yrs),mean(new_loan.data$delinq_2yrs,na.rm = TRUE),new_loan.data$delinq_2yrs)
+new_loan.data$inq_last_6mths<-ifelse(is.na(new_loan.data$inq_last_6mths),mean(new_loan.data$inq_last_6mths,na.rm = TRUE),new_loan.data$inq_last_6mths)
+new_loan.data$open_acc<-ifelse(is.na(new_loan.data$open_acc),mean(new_loan.data$open_acc,na.rm = TRUE),new_loan.data$open_acc)
+new_loan.data$pub_rec<-ifelse(is.na(new_loan.data$pub_rec),mean(new_loan.data$pub_rec,na.rm = TRUE),new_loan.data$pub_rec)
+new_loan.data$revol_util<-ifelse(is.na(new_loan.data$revol_util),mean(new_loan.data$revol_util,na.rm = TRUE),new_loan.data$revol_util)
+new_loan.data$total_acc<-ifelse(is.na(new_loan.data$total_acc),mean(new_loan.data$total_acc,na.rm = TRUE),new_loan.data$total_acc)
+new_loan.data$collections_12_mths_ex_med<-ifelse(is.na(new_loan.data$collections_12_mths_ex_med),mean(new_loan.data$collections_12_mths_ex_med,na.rm = TRUE),new_loan.data$collections_12_mths_ex_med)
+new_loan.data$acc_now_delinq<-ifelse(is.na(new_loan.data$acc_now_delinq),mean(new_loan.data$acc_now_delinq,na.rm = TRUE),new_loan.data$acc_now_delinq)
+new_loan.data$tot_coll_amt<-ifelse(is.na(new_loan.data$tot_coll_amt),mean(new_loan.data$tot_coll_amt,na.rm = TRUE),new_loan.data$tot_coll_amt)
+new_loan.data$tot_cur_bal<-ifelse(is.na(new_loan.data$tot_cur_bal),mean(new_loan.data$tot_cur_bal,na.rm = TRUE),new_loan.data$tot_cur_bal)
+new_loan.data$total_rev_hi_lim<-ifelse(is.na(new_loan.data$total_rev_hi_lim),mean(new_loan.data$total_rev_hi_lim,na.rm = TRUE),new_loan.data$total_rev_hi_lim)
+
+
+#dataset with numerical columns
+numeric_cols<-sapply(new_loan.data,is.numeric)
+loan.data.num_var<-new_loan.data[,numeric_cols]
+str(loan.data.num_var)
+summary(loan.data.num_var)
+cor(loan.data.num_var)
+
+#data with loanstatus as current
+loan_data_current<-subset(new_loan.data,new_loan.data$loan_status=="Current")
+new_loan.data<-new_loan.data[!new_loan.data$loan_status %in% "Current",]
+
+#new variable loan_Category
+bad_loans<-c("Charged Off ","Default","Does not meet the credit policy. Status:Charged Off","In Grace Period","Default Receiver","Late (16-30 days)","Late (31-120 days)")
+new_loan.data$loan_category<-ifelse(new_loan.data$loan_status %in% bad_loans,0,1)
+new_loan.data$loan_category<-factor(new_loan.data$loan_category)
+
+table(new_loan.data$loan_category)
+
+#dataset with categorical columns
+category_cols<-sapply(new_loan.data,is.factor)
+loan.data.cat_var<-new_loan.data[,category_cols]
+str(loan.data.cat_var)
+
+
+multicollinear_cols<-c("funded_amnt","funded_amnt_inv","out_prncp_inv","total_pymnt_inv","total_rec_prncp","verification_status_joint","collection_recovery_fee","grade")
+uniqueID_cols<-c("id","member_id","url","policy_code")
+unwanted_cat_var<-c("emp_title","issue_d","desc","title","zip_code","last_pymnt_d","next_pymnt_d","last_credit_pull_d","loan_status")
+
+new_loan.data<-new_loan.data[ ,! colnames(new_loan.data) %in% c(multicollinear_cols) ]
+new_loan.data<-new_loan.data[ ,! colnames(new_loan.data) %in% c(uniqueID_cols) ]
+new_loan.data<-new_loan.data[ ,! colnames(new_loan.data) %in% c(unwanted_cat_var) ]
+
+#Scaling
+minmax<-function(x)
+{
+  x_new<-(x-min(x))/(max(x)-min(x))
+}
+
+numeric_cols<-sapply(new_loan.data,is.numeric)
+new_loan.data[,numeric_cols]<-apply(new_loan.data[,numeric_cols],2,minmax)
+
+
+
+class0<-subset(new_loan.data,new_loan.data$loan_category==0)
+class1<-subset(new_loan.data,new_loan.data$loan_category==1)
+
+ind0<-sample(nrow(class0),round(0.70*nrow(class0)))
+ind1<-sample(nrow(class1),round(0.70*nrow(class1)))
+
+train0<-class0[ind0,]
+test0<-class0[-ind0,]
+train1<-class1[ind1,]
+test1<-class1[-ind1,]
+
+train<-rbind(train0,train1)
+test<-rbind(test0,test1)
+train$recoveries <- NULL
+test$recoveries <- NULL
+
+#preparation of current loan status data for prediction
+Not_current<-colnames(new_loan.data)
+loan_data_current <- loan_data_current[,colnames(loan_data_current) %in% c(Not_current)]
+loan_data_current$recoveries <- NULL
+loan_data_current_numeric <- sapply(loan_data_current, is.numeric)
+loan_data_current[,loan_data_current_numeric] <- apply(loan_data_current[,loan_data_current_numeric],2,minmax)
+
+#random forest model
+library(randomForest)
+model.rf<-randomForest(as.factor(train$loan_category)~.,data = train,ntree=50,mtry=6,importance=T,na.action = na.omit)
+test$predicted.response <- predict(model.rf ,test)
+varImpPlot(model.rf)
+
+install.packages('caret','e1071')
+library(caret)
+library(e1071)
+confusionMatrix(data=test$predicted.response,reference=test$loan_category)
+
+
+
+#Decision Tree
+library(rpart) 
+m1 <- rpart(as.factor(loan_category) ~ ., data = train, method ="class",xval = 5)
+
+p1<-as.character(predict(m1,test,type = "class"))
+confusionMatrix(p1,test$loan_category)
+
+loan_data_current$loan_category <- predict(model.rf ,loan_data_current)
+loan_data_current$loan_category<-ifelse(loan_data_current$loan_category==1,"Bad","Good")
+
